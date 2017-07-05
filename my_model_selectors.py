@@ -1,3 +1,4 @@
+
 import math
 import statistics
 import warnings
@@ -76,8 +77,28 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        num_hidden_states = self.min_n_components - 1
+        best_bic_score = float("inf")
+        best_model = None
+        
+        while num_hidden_states < self.max_n_components:
+            num_hidden_states += 1
+
+            try:
+                model = self.base_model(num_hidden_states)
+                logL = model.score(self.X, self.lengths)
+                params = num_hidden_states**2 + 2*num_hidden_states*len(self.X[0]) - 1
+                bic_score = -2*logL + params*math.log(len(self.X))
+
+                if bic_score < best_bic_score: 
+                    best_bic_score = bic_score
+                    best_model = model
+
+            except:
+                #If the model cannot be trained pass to next iteration
+                pass
+
+        return best_model
 
 
 class SelectorDIC(ModelSelector):
@@ -92,8 +113,33 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        num_hidden_states = self.min_n_components - 1
+        best_dic_score = float("-inf")
+        best_model = None
+        
+        while num_hidden_states < self.max_n_components:
+            num_hidden_states += 1
+
+            try:
+                model = self.base_model(num_hidden_states)
+                logL = model.score(self.X, self.lengths)
+                logL_AW = 0 #Initialize sum of the logL for all other words
+
+                for word in self.hwords:
+                    X, length = self.hwords[word]
+                    logL_AW += model.score(X, length)
+
+                dic_score = logL - logL_AW/(len(self.hwords) - 1)
+
+                if dic_score > best_dic_score: 
+                    best_dic_score = dic_score
+                    best_model = model
+
+            except:
+                #If the model cannot be trained pass to next iteration
+                pass
+
+        return best_model
 
 
 class SelectorCV(ModelSelector):
@@ -104,5 +150,32 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        num_hidden_states = self.min_n_components - 1
+        best_score = float("-inf")
+        best_model = None
+
+        while num_hidden_states < self.max_n_components:
+            num_hidden_states += 1
+            
+            try:
+                kf = KFold(n_splits = min(3, len(self.sequences)))
+                for cv_train_idx, cv_test_idx in kf.split(self.sequences):
+            
+                    self.X, self.lengths = combine_sequences(cv_train_idx, self.sequences)
+                    model = self.base_model(num_hidden_states)
+                    test_x, test_length = combine_sequences(cv_test_idx, self.sequences)
+                    score = model.score(test_x, test_length)
+
+                    if score > best_score: 
+                        best_score = score
+                        best_model = model
+
+            except:
+                #If the model cannot be trained pass to next iteration
+                pass
+
+        return best_model
+
+
+
+
